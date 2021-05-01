@@ -2,6 +2,20 @@ extern crate plist;
 use serde::{Serialize, Deserialize};
 use rand::prelude::*;
 
+enum Sections {
+    PersistentApps,
+    PersistentOthers,
+    RecentApps,
+    StaticApps,
+    StaticOther,
+}
+
+enum Location {
+    Begining,
+    Middle,
+    End,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct StaticItem {
     #[serde(rename = "GUID")]
@@ -86,23 +100,81 @@ impl FileData {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct Dockm {
     #[serde(rename = "static-only")]
     static_only: Option<bool>,
     #[serde(rename = "persistent-apps")]
-    persistent_apps: Vec<StaticItem>,
+    persistent_apps: Option<Vec<StaticItem>>,
     #[serde(rename = "persistent-others")]
-    persistent_others: Vec<StaticItem>,
+    persistent_others: Option<Vec<StaticItem>>,
     #[serde(rename = "recent-apps")]
-    recent_apps: Vec<StaticItem>,
+    recent_apps: Option<Vec<StaticItem>>,
+    #[serde(rename = "static-apps")]
+    static_apps: Option<Vec<StaticItem>>,
+    #[serde(rename = "static-others")]
+    static_others: Option<Vec<StaticItem>>,
 }
 
 impl Dockm {
-    fn add_item(&mut self, item: StaticItem) {
-        self.persistent_apps.push(item);
+    fn add_item_to_section(mut self, item: StaticItem, section: Sections) {
+        match section {
+            Sections::PersistentApps => self.persistent_apps.as_mut().map(|v| v.push(item)),
+            Sections::PersistentOthers => self.persistent_others.as_mut().map(|v| v.push(item)),
+            Sections::RecentApps => self.recent_apps.as_mut().map(|v| v.push(item)),
+            Sections::StaticApps => self.static_apps.as_mut().map(|v| v.push(item)),
+            Sections::StaticOther => self.static_others.as_mut().map(|v| v.push(item)),
+        };
+    }
+
+    fn add_item_to_section_with_location(mut self, item: StaticItem, section: Sections, location: Location) {
+        match section {
+            Sections::PersistentApps => {
+                match location {
+                    Location::Begining => self.persistent_apps.as_mut().map(|v| v.push(item)),
+                    Location::Middle => self.persistent_apps.as_mut().map(|v| v.push(item)),
+                    Location::End => self.persistent_apps.as_mut().map(|v| v.push(item)),
+                };
+            },
+            Sections::PersistentOthers => { 
+                match location {
+                    Location::Begining => self.persistent_apps.as_mut().map(|v| v.insert(0, item)),
+                    Location::Middle => self.persistent_apps.as_mut().map(|v| v.insert(0, item)),
+                    Location::End => self.persistent_apps.as_mut().map(|v| v.push(item)),
+                };
+             },
+            Sections::RecentApps => { self.recent_apps.unwrap().push(item.to_owned()); },
+            Sections::StaticApps => { self.static_apps.unwrap().push(item.to_owned()); },
+            Sections::StaticOther => { self.static_others.unwrap().push(item.to_owned()); },
+        }
     }
 }
+
 fn main() {
-    println!("Hello, world!");
+    // let dock = Value::from_file("src/com.apple.dock.plist").unwrap();
+    // dock.to_file_xml("src/com.apple.dock.xml");
+    let dock: Dockm = plist::from_file("src/com.apple.dock.plist").unwrap();
+
+    // dock.add_item_to_section(StaticItem::new_file_tile("Google Chrome.app"), Sections::PersistentApps);
+    dock.add_item_to_section_with_location(StaticItem::new_file_tile("Google Chrome.app"), Sections::PersistentApps, Location::Begining);
+
+    let persistent_apps = dock.persistent_apps.unwrap();
+
+    println!("{0: <45} | {1: <140} | {2: <10} | {3: <10} | {4: <10}", "Label", "FilePath", "FileType", "ShowAs", "Arrangement");
+    for item in persistent_apps {
+        println!("{0: <45} | {1: <140} | {2: <10} | {3: <10} | {4: <10}", item.tile_data.file_label, item.tile_data.file_data.cf_url_string, item.tile_data.file_data.cf_url_string_type, item.tile_data.display_as.unwrap_or_default(), item.tile_data.arrangement.unwrap_or_default())
+    }
+
+    // println!("{:#?}", StaticItem::new_file_tile("Google Chrome.app"));
+
+    // dock.add_item()
+
+    // let tile = dock.unwrap().as_dictionary().unwrap()["persistent-others"].;
+    // println!("{:#?}", dock.unwrap().as_dictionary().unwrap()["persistent-others"]);
+    // println!("{:#?}", dock.recent_apps.unwrap());
+    // dock.add_item("/test/dsg", "recent-apps", "first").expect("Adding new item")
+
+    // for tile in dock {
+    //     println!("{:#?}", tile);
+    // }
 }
